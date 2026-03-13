@@ -1,0 +1,47 @@
+cd "/Users/kvaibhavsai/Documents/MAJOR copy"
+source venv/bin/activate
+
+
+which python
+python --version
+
+
+
+
+TRAINNNNN
+
+python main_quantum.py train \
+  --epochs 10 \
+  --batch 1 \
+  --img 224 \
+  --lr 0.0003 \
+  --n_qubits 4 \
+  --n_layers 2 \
+  --latent_dim 8 \
+  --q_output 16
+
+
+  TESTTTT
+
+  python main_quantum.py test \
+  --img 224 \
+  --n_qubits 4 \
+  --n_layers 2 \
+  --latent_dim 8 \
+  --q_output 16
+
+
+
+
+
+  TRAIN 2 
+  python main_quantum.py train \
+  --epochs 50 \
+  --batch 4 \
+  --img 224 \
+  --lr 0.0001 \
+  --latent_dim 32 \
+  --q_output 32 \
+  --use-resnet-backbone \
+  --use-class-weight \
+  --augment

@@ -1,0 +1,8 @@
+{
+  "mode": "full",
+  "num_classes": 26,
+  "use_tanh": false,
+  "head_hidden": 128,
+  "collapse_stage1": true,
+  "collapse_stage2": true
+}

@@ -1,0 +1,544 @@
+# -*- coding: utf-8 -*-
+"""Classical EEG A–Z classifier (SimpleCNN, single-file).
+
+This script provides a **deterministic, classical-only** training and
+prediction pipeline that does **not** depend on PennyLane.
+
+Usage (from repo root):
+
+  Train:
+      python main_classical.py train --epochs 10 --batch 8 --img 224 --lr 3e-4
+
+  Test / predict (on external test folder, default "teseting Dataset"):
+      python main_classical.py test --img 224 --test-root "teseting Dataset"
+
+The script is designed for macOS + venv + VS Code, but also runs on CPU-only
+Linux/Windows. It always writes checkpoints to ``modells/best_classical.pt``.
+"""
+
+import argparse
+import math
+import os
+import random
+import time
+from pathlib import Path
+from typing import Dict, List, Sequence, Tuple
+
+
+import numpy as np
+from PIL import Image
+
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
+import torch.nn.functional as F
+
+# ---------------------------------------------------------------------------
+# Global label set
+# ---------------------------------------------------------------------------
+
+LABELS = [chr(ord("A") + i) for i in range(26)]
+LBL2ID = {c: i for i, c in enumerate(LABELS)}
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility & devices
+# ---------------------------------------------------------------------------
+
+
+def set_seed(seed: int = 42) -> None:
+    """Set Python, NumPy, and Torch RNG seeds for reasonably deterministic runs."""
+
+    import numpy as _np
+
+    random.seed(seed)
+    _np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def get_device() -> torch.device:
+    """Pick best available device (cuda > mps > cpu) and print diagnostics."""
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif getattr(torch, "has_mps", False) and getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    print(f"[Diag] Torch version: {torch.__version__}")
+    print(f"[Diag] Using device: {device}")
+    if device.type == "cuda":
+        print(f"[Diag] CUDA device count: {torch.cuda.device_count()}")
+        print(f"[Diag] CUDA device name: {torch.cuda.get_device_name(0)}")
+    return device
+
+
+# ---------------------------------------------------------------------------
+# Dataset helpers
+# ---------------------------------------------------------------------------
+
+
+def infer_label_from_path(p: Path) -> str:
+    """Infer label A–Z from either the parent folder or filename prefix.
+
+    This keeps compatibility with the original dataset layout where images are
+    placed either under ``training dataset/A/`` … ``Z/`` or named like
+    ``A_001.png`` etc.
+    """
+
+    parent = p.parent.name.upper()
+    if parent in LBL2ID:
+        return parent
+    stem = p.stem.upper()
+    if stem and stem[0] in LBL2ID:
+        return stem[0]
+    raise ValueError(f"Cannot infer label for: {p}")
+
+
+def list_images(root: Path) -> List[Path]:
+    """Recursively list image files under ``root`` (PNG/JPEG/BMP)."""
+
+    exts = {".png", ".jpg", ".jpeg", ".bmp"}
+    return sorted([p for p in root.rglob("*") if p.suffix.lower() in exts])
+
+
+def load_image_tensor(path: Path, img_size: int = 224, to_gray: bool = True) -> torch.Tensor:
+    """Load an image as a ``torch.FloatTensor`` in ``[0,1]``.
+
+    - If ``to_gray`` is True, returns shape ``(1,H,W)``.
+    - Otherwise returns ``(3,H,W)``.
+    """
+
+    img = Image.open(path).convert("L" if to_gray else "RGB")
+    img = img.resize((img_size, img_size), Image.BILINEAR)
+    arr = np.array(img).astype(np.float32) / 255.0
+    if to_gray:
+        arr = arr[None, ...]  # (1,H,W)
+    else:
+        arr = np.transpose(arr, (2, 0, 1))  # (3,H,W)
+    x = torch.from_numpy(arr)
+    return x
+
+
+# --- robust stratified split (replacement) ---
+def robust_stratified_split(paths, val_ratio=0.15, min_val_per_class=1):
+    by_lbl = {c: [] for c in LABELS}
+    for p in paths:
+        try:
+            lbl = infer_label_from_path(p)
+            by_lbl[lbl].append(p)
+        except Exception:
+            pass
+
+    train_items, val_items = [], []
+
+    for cls, imgs in by_lbl.items():
+        if not imgs:
+            continue
+        n = len(imgs)
+        if n == 1:
+            # single image -> use it for training (can't validate)
+            train_items.append((imgs[0], LBL2ID[cls]))
+        elif n == 2:
+            # split 1/1
+            train_items.append((imgs[0], LBL2ID[cls]))
+            val_items.append((imgs[1], LBL2ID[cls]))
+        else:
+            # 3+ images -> stratified per-class
+            random.shuffle(imgs)
+            n_val = max(min_val_per_class, int(max(1, n * val_ratio)))
+            n_val = min(n - 1, n_val)
+            val_items += [(p, LBL2ID[cls]) for p in imgs[:n_val]]
+            train_items += [(p, LBL2ID[cls]) for p in imgs[n_val:]]
+
+    # If train empty (rare), fallback to use at least one sample from each class into train
+    if len(train_items) == 0 and len(val_items) > 0:
+        print("[WARN] Train set empty after split; moving a small set from val to train.")
+        # move one per class from val to train
+        tmp_by_lbl = {}
+        for p, y in val_items:
+            tmp_by_lbl.setdefault(y, []).append(p)
+        new_train, new_val = [], []
+        for lbl_id, pls in tmp_by_lbl.items():
+            new_train.append((pls[0], lbl_id))
+            for p in pls[1:]:
+                new_val.append((p, lbl_id))
+        train_items, val_items = new_train, new_val
+
+    print(f"[Diag] Final split -> Train: {len(train_items)}  Val: {len(val_items)}")
+    return train_items, val_items
+
+
+class EEGImageDataset(Dataset):
+    """Tiny image dataset wrapper with light augmentations for training."""
+
+    def __init__(
+        self,
+        items: List[Tuple[Path, int]],
+        img_size: int = 224,
+        gray: bool = True,
+        train: bool = False,
+    ) -> None:
+        self.items = items
+        self.img_size = img_size
+        self.gray = gray
+        self.train = train
+
+    def __len__(self) -> int:  # pragma: no cover - trivial
+        return len(self.items)
+
+    def _augment(self, x: torch.Tensor) -> torch.Tensor:
+        if not self.train:
+            return x
+        # Light Gaussian noise
+        if torch.rand(1).item() < 0.6:
+            x = torch.clamp(x + 0.02 * torch.randn_like(x), 0.0, 1.0)
+        # Small random blackout patch
+        if torch.rand(1).item() < 0.4:
+            _, h, w = x.shape
+            ch = int(0.15 * h)
+            cw = int(0.15 * w)
+            y0 = torch.randint(0, max(1, h - ch), (1,)).item()
+            x0 = torch.randint(0, max(1, w - cw), (1,)).item()
+            x[:, y0 : y0 + ch, x0 : x0 + cw] = 0
+        return x
+
+    def __getitem__(self, idx: int):
+        path, y = self.items[idx]
+        x = load_image_tensor(path, self.img_size, self.gray)
+        x = self._augment(x)
+        return x, y
+
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+
+
+class SimpleCNN(nn.Module):
+    """Small CNN suitable for 1xHxW images and 26-way classification."""
+
+    def __init__(self, img_ch: int = 1, num_classes: int = 26) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(img_ch, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),  # H/2
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),  # H/4
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),  # H/8
+        )
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(64, 64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(64, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # pragma: no cover - trivial
+        x = self.features(x)
+        x = self.classifier(x)
+        return x
+
+
+# ---------------------------------------------------------------------------
+# Train/val split helpers
+# ---------------------------------------------------------------------------
+
+
+def build_train_val_splits(img_size: int):
+    """Create non-empty train/val datasets from ``training dataset/``.
+
+    Guarantees:
+    - Training split is never empty.
+    - If the initial validation split is empty, we deterministically move
+      ~10% (min 1) of the training items into validation. If that still leaves
+      validation empty, we reuse a tiny subset of training as validation.
+    """
+
+    train_root = Path("training dataset")
+    if not train_root.exists():
+        print(f"[Error] training dataset/ not found at {train_root}")
+        raise SystemExit(1)
+
+    paths = list_images(train_root)
+    if len(paths) == 0:
+        print(f"[Error] No images found in {train_root}")
+        raise SystemExit(1)
+
+    print(f"[Diag] Found {len(paths)} images under '{train_root}'")
+    train_items, val_items = robust_stratified_split(paths, val_ratio=0.15)
+
+    if len(train_items) == 0 and len(val_items) == 0:
+        print("[Error] Could not infer labels for any images; check dataset layout.")
+        raise SystemExit(1)
+
+    # Additional deterministic fallback if validation is empty.
+    if len(val_items) == 0:
+        print("[Diag] Validation split empty after stratified split; moving 10% of"
+              " training items into validation.")
+        if len(train_items) > 1:
+            # Deterministic: sort by path name, then take first ~10% into val
+            sorted_train = sorted(train_items, key=lambda t: str(t[0]))
+            n = len(sorted_train)
+            n_val = max(1, int(math.ceil(0.10 * n)))
+            n_val = min(n - 1, n_val)  # keep at least one in train
+            val_items = sorted_train[:n_val]
+            train_items = sorted_train[n_val:]
+
+    if len(val_items) == 0:
+        # Still empty: reuse a tiny subset of training as validation (no removal)
+        print("[Diag] Validation still empty; reusing a tiny subset of training as validation.")
+        n = len(train_items)
+        if n == 0:
+            print("[Error] No training data available; aborting.")
+            raise SystemExit(1)
+        n_val = max(1, min(5, n))
+        # Deterministic subset
+        val_items = sorted(train_items, key=lambda t: str(t[0]))[:n_val]
+
+    ds_tr = EEGImageDataset(train_items, img_size=img_size, gray=True, train=True)
+    ds_va = EEGImageDataset(val_items, img_size=img_size, gray=True, train=False)
+
+    print(f"[Diag] Final dataset sizes -> Train: {len(ds_tr)}  Val: {len(ds_va)}")
+
+    if len(ds_tr) == 0:
+        print("[Error] Train split ended up empty after all fallbacks; aborting.")
+        raise SystemExit(1)
+
+    return ds_tr, ds_va
+
+
+def make_dataloaders(ds_tr: Dataset, ds_va: Dataset, batch: int, device: torch.device):
+    """Create train/val dataloaders with safe defaults for macOS."""
+
+    num_workers = 0  # safest on macOS / CPU; adjust if you know what you're doing
+    pin_mem = device.type == "cuda"
+    dl_tr = DataLoader(ds_tr, batch_size=batch, shuffle=True, num_workers=num_workers, pin_memory=pin_mem)
+    dl_va = DataLoader(ds_va, batch_size=batch, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
+    return dl_tr, dl_va
+
+
+# ---------------------------------------------------------------------------
+# Training loop
+# ---------------------------------------------------------------------------
+
+
+def train(args: argparse.Namespace) -> None:
+    """Train SimpleCNN on ``training dataset/`` and save best checkpoint."""
+
+    set_seed(args.seed)
+    device = get_device()
+
+    ds_tr, ds_va = build_train_val_splits(args.img)
+    dl_tr, dl_va = make_dataloaders(ds_tr, ds_va, args.batch, device)
+
+    model = SimpleCNN(img_ch=1, num_classes=len(LABELS)).to(device)
+
+    # Loss & optimizer
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, args.epochs))
+
+    models_dir = Path("modells")
+    models_dir.mkdir(exist_ok=True)
+    ckpt_path = models_dir / "best_classical.pt"
+
+    best_acc = 0.0
+    best_epoch = 0
+
+    for ep in range(1, args.epochs + 1):
+        t0 = time.time()
+        model.train()
+        train_loss = 0.0
+        n_batches = 0
+
+        for x, y in dl_tr:
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(x)
+            loss = criterion(logits, y)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+            n_batches += 1
+
+        if n_batches == 0:
+            print("[Error] No batches were produced by the training dataloader; check dataset.")
+            raise SystemExit(1)
+
+        scheduler.step()
+
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for x, y in dl_va:
+                x = x.to(device)
+                y = y.to(device)
+                logits = model(x)
+                loss = criterion(logits, y)
+                val_loss += loss.item()
+                preds = logits.argmax(1)
+                correct += (preds == y).sum().item()
+                total += y.size(0)
+
+        avg_train_loss = train_loss / float(n_batches)
+        avg_val_loss = val_loss / max(1, len(dl_va)) if len(dl_va) > 0 else 0.0
+        val_acc = correct / max(1, total)
+        elapsed = int(time.time() - t0)
+
+        # Epoch 001/10  train_loss=3.2736  val_loss=0.0000  val_acc=0.0000  time=13s
+        print(
+            f"Epoch {ep:03d}/{args.epochs}  "
+            f"train_loss={avg_train_loss:.4f}  "
+            f"val_loss={avg_val_loss:.4f}  "
+            f"val_acc={val_acc:.4f}  "
+            f"time={elapsed}s"
+        )
+
+        # Save best checkpoint (and at least once after epoch 1).
+        state = {
+            "model": model.state_dict(),
+            "arch": "simple_cnn",
+            "img": int(args.img),
+            "num_classes": len(LABELS),
+            "qparams": None,
+        }
+        if ep == 1 or val_acc >= best_acc:
+            best_acc = max(best_acc, val_acc)
+            best_epoch = ep
+            torch.save(state, ckpt_path)
+            print(f"[Checkpoint] Saved best_classical.pt at epoch {ep} (val_acc={val_acc:.4f})")
+
+    print(f"Training done. Best val_acc={best_acc:.4f} saved to {ckpt_path} (epoch {best_epoch})")
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint loading & test-time prediction
+# ---------------------------------------------------------------------------
+
+
+def _load_checkpoint_for_eval(ckpt_path: Path, device: torch.device) -> Tuple[nn.Module, Dict]:
+    if not ckpt_path.exists():
+        print(f"[Error] Checkpoint not found: {ckpt_path}")
+        raise SystemExit(1)
+
+    ckpt = torch.load(ckpt_path, map_location=device)
+    img_size = int(ckpt.get("img", 224))
+    model = SimpleCNN(img_ch=1, num_classes=len(LABELS))
+    model.load_state_dict(ckpt["model"], strict=False)
+    model = model.to(device).eval()
+    print(f"[Diag] Loaded checkpoint {ckpt_path} (arch={ckpt.get('arch', 'simple_cnn')}, img={img_size})")
+    return model, {"img": img_size}
+
+from typing import Optional
+
+def _resolve_test_root(path_arg: Optional[str]) -> Path:
+    """Resolve the test root directory with the expected spelling.
+
+    Default: ``teseting Dataset``. If that does not exist but ``testing dataset``
+    does, use it and log a diagnostic.
+    """
+
+    if path_arg:
+        p = Path(path_arg)
+        if not p.exists():
+            print(f"[Error] --test-root {p} does not exist")
+            raise SystemExit(1)
+        return p
+
+    primary = Path("teseting Dataset")
+    if primary.exists():
+        return primary
+
+    alt = Path("testing dataset")
+    if alt.exists():
+        print("[Diag] Using alternate test folder: 'testing dataset'")
+        return alt
+
+    print("[Error] Neither 'teseting Dataset' nor 'testing dataset' exists.")
+    raise SystemExit(1)
+
+
+def test(args: argparse.Namespace) -> None:
+    """Load best checkpoint and run predictions on the test set.
+
+    This mode **does not** touch the training data; it only loads
+    ``modells/best_classical.pt`` and runs inference on ``--test-root``.
+    """
+
+    set_seed(args.seed)
+    device = get_device()
+
+    test_root = _resolve_test_root(args.test_root)
+    imgs = list_images(test_root)
+    if len(imgs) == 0:
+        print(f"[Error] No images found under {test_root}")
+        raise SystemExit(1)
+
+    ckpt_path = Path("modells/best_classical.pt")
+    model, meta = _load_checkpoint_for_eval(ckpt_path, device)
+    img_size = int(meta["img"])
+
+    print(f"[Predict] Using test folder: {test_root} ({len(imgs)} images)")
+
+    letters: List[str] = []
+    for p in imgs:
+        x = load_image_tensor(p, img_size=img_size, to_gray=True).unsqueeze(0).to(device)
+        with torch.no_grad():
+            logits = model(x)[0]
+            probs = F.softmax(logits, dim=0)
+
+        top_idx = int(torch.argmax(probs).item())
+        top_prob = float(probs[top_idx].item() * 100.0)
+        top_label = LABELS[top_idx]
+        letters.append(top_label)
+
+        print(f"[Predict] {p} -> {top_label} ({top_prob:.2f}%)")
+
+    word = "".join(letters)
+    print(f"Final Predicted Word: {word}")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Classical CNN EEG A–Z classifier")
+    ap.add_argument("mode", choices=["train", "test"], help="Operation mode")
+    ap.add_argument("--epochs", type=int, default=10, help="Number of epochs (train)")
+    ap.add_argument("--batch", type=int, default=8, help="Batch size")
+    ap.add_argument("--img", type=int, default=224, help="Input image size")
+    ap.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+    ap.add_argument("--test-root", type=str, default="", help="Test images root directory")
+    ap.add_argument("--seed", type=int, default=42, help="Random seed for RNGs")
+    return ap.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if args.mode == "train":
+        train(args)
+    elif args.mode == "test":
+        test(args)
+
+
+if __name__ == "__main__":
+    main()

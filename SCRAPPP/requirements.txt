@@ -1,0 +1,9 @@
+autoray==0.6.11
+pennylane==0.38.0
+pennylane-qiskit==0.38.0
+torch==2.0.1
+torchvision==0.15.2
+pillow
+numpy
+tqdm
+pytest

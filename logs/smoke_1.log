@@ -1,0 +1,15 @@
+[train_single] Starting experiment smoke_1
+/Users/kvaibhavsai/Documents/MAJOR copy/main_quantum.py:517: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+[Diag] Torch version: 2.8.0
+[Diag] Using device: mps
+[Diag] PennyLane not importable.
+[Diag] PennyLane import error: No module named 'pennylane'
+[Diag] autoray not importable.
+[Quantum] PennyLane not available; using purely classical linear layer instead.
+[Quantum] PennyLane import error: No module named 'pennylane'
+[Train] Found 26 images. Saving checkpoints under: /Users/kvaibhavsai/Documents/MAJOR copy/modells
+Epoch 1/1 [train]:   0%|          | 0/26 [00:00<?, ?it/s]Epoch 1/1 [train]:   4%|▍         | 1/26 [00:01<00:43,  1.72s/it]Epoch 1/1 [train]:  50%|█████     | 13/26 [00:01<00:01,  9.68it/s]Epoch 1/1 [train]:  92%|█████████▏| 24/26 [00:01<00:00, 19.36it/s]                                                                  Epoch 001/1  train_loss=3.2736  val_loss=0.0000  val_acc=0.0000  time=13s
+[Train] Done. Best val_acc=0.0000 at epoch 0
+[train_single] Copied best checkpoint to /Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_smoke_1.pt
+[train_single] Metrics written to /Users/kvaibhavsai/Documents/MAJOR copy/logs/smoke_1.metrics.json (elapsed 20s)

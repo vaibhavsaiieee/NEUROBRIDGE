@@ -1,0 +1,24 @@
+[train_single] Starting experiment 20251120_161857_9
+/Users/kvaibhavsai/Documents/MAJOR copy/main_quantum.py:517: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+[Diag] Torch version: 2.8.0
+[Diag] Using device: mps
+[Diag] PennyLane not importable.
+[Diag] PennyLane import error: No module named 'pennylane'
+[Diag] autoray not importable.
+[Quantum] PennyLane not available; using purely classical linear layer instead.
+[Quantum] PennyLane import error: No module named 'pennylane'
+[Train] Found 26 images. Saving checkpoints under: /Users/kvaibhavsai/Documents/MAJOR copy/modells
+Epoch 1/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 1/10 [train]:  14%|█▍        | 1/7 [00:01<00:08,  1.36s/it]                                                                 Epoch 001/10  train_loss=3.2847  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 2/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 2/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.25s/it]                                                                 Epoch 002/10  train_loss=3.2789  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 3/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 3/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.24s/it]                                                                 Epoch 003/10  train_loss=3.3014  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 4/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 4/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.25s/it]                                                                 Epoch 004/10  train_loss=3.2764  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 5/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 5/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.25s/it]                                                                 Epoch 005/10  train_loss=3.2446  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 6/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 6/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.25s/it]                                                                 Epoch 006/10  train_loss=3.3025  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 7/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 7/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.26s/it]                                                                 Epoch 007/10  train_loss=3.2852  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 8/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 8/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.26s/it]                                                                 Epoch 008/10  train_loss=3.3060  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 9/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 9/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.27s/it]                                                                 Epoch 009/10  train_loss=3.2717  val_loss=0.0000  val_acc=0.0000  time=12s
+Epoch 10/10 [train]:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 10/10 [train]:  14%|█▍        | 1/7 [00:01<00:07,  1.26s/it]                                                                  Epoch 010/10  train_loss=3.2730  val_loss=0.0000  val_acc=0.0000  time=12s
+[Train] Done. Best val_acc=0.0000 at epoch 0
+[train_single] Copied best checkpoint to /Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_161857_9.pt
+[train_single] Metrics written to /Users/kvaibhavsai/Documents/MAJOR copy/logs/20251120_161857_9.metrics.json (elapsed 130s)

@@ -1,0 +1,97 @@
+It is a hybrid quantum–classical EEG waveform classification system.
+
+It takes EEG waveform images as input.
+
+It performs noise removal and artifact suppression on EEG data.
+
+It converts EEG images into numerical tensors for learning.
+
+It uses a classical neural network encoder to reduce input dimensionality.
+
+It uses a quantum circuit (PennyLane) as a feature extractor.
+
+The quantum layer uses qubits, rotation gates, and entanglement.
+
+Quantum features are passed to a classical classifier head.
+
+The model predicts letters from A to Z.
+
+Predicted letters are combined to form a word.
+
+Training and testing are controlled via command-line arguments.
+
+The system supports CPU, GPU, and Apple MPS acceleration.
+
+It saves the best trained model automatically.
+
+It demonstrates quantum-enhanced learning for EEG signals.
+
+It compares quantum feature learning with classical encoding.
+
+The entire pipeline runs in a single reproducible Python file.
+
+
+
+
+EEG waveform classification
+→ done by hybrid quantum–classical neural network
+
+EEG image loading
+→ done by PIL (Python Imaging Library)
+
+Conversion to numerical format
+→ done by NumPy arrays and PyTorch tensors
+
+Noise removal in EEG signals
+→ done by OpenCV median filtering
+
+Artifact suppression (muscle / high-frequency noise)
+→ done by OpenCV Gaussian blur
+
+Signal normalization and scaling
+→ done by NumPy statistical normalization
+
+Dimensionality reduction of EEG images
+→ done by classical neural network encoder (PyTorch Linear layers)
+
+Non-linear feature extraction
+→ done by quantum circuit implemented using PennyLane
+
+Quantum encoding of classical features
+→ done by RX rotation gates on qubits
+
+Feature entanglement and expressivity
+→ done by CNOT gates in the quantum circuit
+
+Quantum measurement of features
+→ done by Pauli-Z expectation values
+
+Post-quantum feature transformation
+→ done by PyTorch Linear layer
+
+Final letter classification (A–Z)
+→ done by classical neural network head (PyTorch)
+
+Training and weight optimization
+→ done by Adam optimizer (PyTorch)
+
+Loss computation for learning
+→ done by Cross-Entropy Loss
+
+Model validation and accuracy calculation
+→ done by PyTorch evaluation logic
+
+Best model saving
+→ done by PyTorch model checkpointing
+
+Testing on unseen EEG data
+→ done by trained model in inference mode
+
+Word formation from predicted letters
+→ done by Python string concatenation
+
+Hardware acceleration (CPU / GPU / Apple MPS)
+→ done by PyTorch device selection
+
+Command-line execution (train / test)
+→ done by argparse

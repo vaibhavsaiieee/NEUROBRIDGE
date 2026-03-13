@@ -1,0 +1,5 @@
+{
+  "img_size": 64,
+  "emb_dim": 64,
+  "num_classes": 26
+}
