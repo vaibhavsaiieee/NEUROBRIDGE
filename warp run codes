@@ -1,0 +1,39 @@
+cd "/Users/kvaibhavsai/Documents/MAJOR copy"
+code .
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install torch pennylane numpy opencv-python tqdm
+
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy"
+source venv/bin/activate
+python 2Quantum.py train
+
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy"
+source venv/bin/activate
+python 2Quantum.py test
+
+
+FIALLLLLLLL
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy"
+source venv/bin/activate
+pip install scikit-learn
+python 2Quantum.py train
+python 2Quantum.py test
+
+
+
+
+QUANTUMM MANUP CODES 
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy" && source venv/bin/activate && python vaibhav.py train --epochs 20
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy" && source venv/bin/activate && python vaibhav.py test --folder Folder1
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy" && source venv/bin/activate && python vaibhav.py test --folder Folder2
+
+cd "/Users/kvaibhavsai/Documents/MAJOR copy" && source venv/bin/activate && python vaibhav.py test --folder Folder3
+

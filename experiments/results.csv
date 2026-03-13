@@ -1,0 +1,12 @@
+exp_id,latent_dim,q_output,n_qubits,lr,batch,seed,best_val_acc,best_epoch,ckpt_path,time_elapsed
+20251120_155426_1,8,8,2,0.0003,4,42,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_155426_1.pt,133
+20251120_155639_2,8,8,2,0.0003,4,123,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_155639_2.pt,547
+20251120_160546_3,8,8,2,0.0003,8,42,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_160546_3.pt,134
+20251120_160800_4,8,8,2,0.0003,8,123,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_160800_4.pt,134
+20251120_161014_5,8,8,2,0.0001,4,42,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_161014_5.pt,131
+20251120_161225_6,8,8,2,0.0001,4,123,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_161225_6.pt,131
+20251120_161436_7,8,8,2,0.0001,8,42,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_161436_7.pt,130
+20251120_161646_8,8,8,2,0.0001,8,123,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_161646_8.pt,131
+20251120_161857_9,8,8,4,0.0003,4,42,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_161857_9.pt,130
+20251120_162107_10,8,8,4,0.0003,4,123,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_162107_10.pt,131
+20251120_162318_11,8,8,4,0.0003,8,42,0.0,1,/Users/kvaibhavsai/Documents/MAJOR copy/modells/exp_20251120_162318_11.pt,131
